@@ -59,7 +59,10 @@ type conn struct {
 }
 
 func (c *conn) Write(b []byte) (n int, err error) {
-	req, _ := http.NewRequest(http.MethodPost, c.serverURL, bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, c.serverURL, bytes.NewReader(b))
+	if err != nil {
+		return 0, log.Errorf("Error constructing request: %v", err)
+	}
 	req.Header.Set(ConnectionIDHeader, c.id)
 	req.Header.Set(OriginHeader, c.origin)
 	resp, err := c.client.Do(req)
