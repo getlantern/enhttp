@@ -7,19 +7,17 @@ import (
 	"sync"
 )
 
-func Serve(l net.Listener) error {
-	s := &server{
-		conns: make(map[string]net.Conn, 1000),
+func NewServerHandler(serverURL string) http.Handler {
+	return &server{
+		serverURL: serverURL,
+		conns:     make(map[string]net.Conn, 1000),
 	}
-	hs := &http.Server{
-		Handler: s,
-	}
-	return hs.Serve(l)
 }
 
 type server struct {
-	conns map[string]net.Conn
-	mx    sync.RWMutex
+	serverURL string
+	conns     map[string]net.Conn
+	mx        sync.RWMutex
 }
 
 func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
@@ -50,6 +48,9 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		req.Body.Close()
 		resp.Header().Set("Connection", "Keep-Alive")
 		resp.Header().Set("Transfer-Encoding", "chunked")
+		if s.serverURL != "" {
+			resp.Header().Set(ServerURL, s.serverURL)
+		}
 		resp.WriteHeader(http.StatusOK)
 		resp.(http.Flusher).Flush()
 		buf := make([]byte, 8192)

@@ -7,6 +7,7 @@ import (
 const (
 	ConnectionIDHeader = "X-En-Conn-Id"
 	OriginHeader       = "X-Origin"
+	ServerURL          = "X-Server-URL"
 )
 
 var (

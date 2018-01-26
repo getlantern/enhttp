@@ -56,10 +56,14 @@ type conn struct {
 	unread       []byte
 	receiveOnce  sync.Once
 	closeOnce    sync.Once
+	mx           sync.RWMutex
 }
 
 func (c *conn) Write(b []byte) (n int, err error) {
-	req, err := http.NewRequest(http.MethodPost, c.serverURL, bytes.NewReader(b))
+	c.mx.RLock()
+	serverURL := c.serverURL
+	c.mx.RUnlock()
+	req, err := http.NewRequest(http.MethodPost, serverURL, bytes.NewReader(b))
 	if err != nil {
 		return 0, log.Errorf("Error constructing request: %v", err)
 	}
@@ -71,6 +75,12 @@ func (c *conn) Write(b []byte) (n int, err error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		return 0, errors.New("Unexpected response status posting data: %d", resp.StatusCode)
+	}
+	updatedServerURL := resp.Header.Get(ServerURL)
+	if updatedServerURL != "" {
+		c.mx.Lock()
+		c.serverURL = updatedServerURL
+		c.mx.Unlock()
 	}
 	c.receiveOnce.Do(func() {
 		go c.receive(resp)

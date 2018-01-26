@@ -42,14 +42,25 @@ func TestRoundTrip(t *testing.T) {
 		}
 	}()
 
-	// enhttp server
+	// enhttp server (two separate listeners, single server)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if !assert.NoError(t, err) {
 		return
 	}
 	defer l.Close()
 
-	go Serve(l)
+	l2, err := net.Listen("tcp", "127.0.0.1:0")
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer l2.Close()
+
+	// second enhttp server
+	hs := &http.Server{
+		Handler: NewServerHandler(fmt.Sprintf("http://%v/", l2.Addr())),
+	}
+	go hs.Serve(l)
+	go hs.Serve(l2)
 
 	// enhttp dialer
 	dialer := NewDialer(&http.Client{}, fmt.Sprintf("http://%v/", l.Addr()))
