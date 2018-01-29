@@ -13,7 +13,9 @@ import (
 	"github.com/getlantern/uuid"
 )
 
-// NewDialer creates a new dialer that dials out using the enhttp protocol
+// NewDialer creates a new dialer that dials out using the enhttp protocol,
+// tunneling via the server specified by serverURL. An http.Client must be
+// specified to configure the underlying HTTP behavior.
 func NewDialer(client *http.Client, serverURL string) func(string, string) (net.Conn, error) {
 	return func(network, addr string) (net.Conn, error) {
 		return &conn{

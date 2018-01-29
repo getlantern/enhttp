@@ -5,8 +5,13 @@ import (
 	"net"
 	"net/http"
 	"sync"
+
+	"github.com/getlantern/golog"
 )
 
+// NewServerHandler creates an http.Handler that performs the server-side
+// processing of enhttp. serverURL optionally specifies the unique URL at which
+// this server can be reached (used for sticky routing).
 func NewServerHandler(serverURL string) http.Handler {
 	return &server{
 		serverURL: serverURL,
