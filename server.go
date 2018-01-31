@@ -5,8 +5,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-
-	"github.com/getlantern/golog"
 )
 
 // NewServerHandler creates an http.Handler that performs the server-side
@@ -33,6 +31,7 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	first := conn == nil
 
 	if first {
+		// Connect to the origin
 		origin := req.Header.Get(OriginHeader)
 		var err error
 		conn, err = net.Dial("tcp", origin)
@@ -41,9 +40,13 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			resp.WriteHeader(http.StatusBadGateway)
 			return
 		}
+
+		// Remember the origin connection
 		s.mx.Lock()
 		s.conns[connID] = conn
 		s.mx.Unlock()
+
+		// Write the request body to origin
 		_, err = io.Copy(conn, req.Body)
 		if err != nil {
 			log.Errorf("Error reading request body: %v", err)
@@ -51,26 +54,44 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			return
 		}
 		req.Body.Close()
+
+		// Set up the response for streaming
 		resp.Header().Set("Connection", "Keep-Alive")
 		resp.Header().Set("Transfer-Encoding", "chunked")
 		if s.serverURL != "" {
 			resp.Header().Set(ServerURL, s.serverURL)
 		}
 		resp.WriteHeader(http.StatusOK)
+
+		// Force writing the HTTP response header to client
 		resp.(http.Flusher).Flush()
+
+		// Read from the origin and write data to client
 		buf := make([]byte, 8192)
-	readLoop:
 		for {
 			n, err := conn.Read(buf)
-			if err != nil {
-				break readLoop
+			if n > 0 {
+				resp.Write(buf[:n])
+				resp.(http.Flusher).Flush()
 			}
-			resp.Write(buf[:n])
-			resp.(http.Flusher).Flush()
+			if err != nil {
+				break
+			}
 		}
 		return
 	}
 
+	if req.Header.Get(Close) != "" {
+		// Close the connection
+		conn.Close()
+		s.mx.Lock()
+		delete(s.conns, connID)
+		s.mx.Unlock()
+		resp.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Not first request, simply write request data to origin
 	_, err := io.Copy(conn, req.Body)
 	if err != nil {
 		log.Errorf("Error reading request body: %v", err)

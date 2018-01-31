@@ -29,6 +29,9 @@ const (
 	// ServerURL optionally specifies the URL to the server that handled the first
 	// POST.
 	ServerURL = "X-Server-URL"
+
+	// Close indicates that the connection has been closed.
+	Close = "X-Close"
 )
 
 var (

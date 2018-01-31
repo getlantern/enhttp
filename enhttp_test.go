@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/getlantern/fdcount"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,6 +16,11 @@ const (
 )
 
 func TestRoundTrip(t *testing.T) {
+	_, counter, err := fdcount.Matching("TCP")
+	defer func() {
+		assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed")
+	}()
+
 	// echo server
 	el, err := net.Listen("tcp", "127.0.0.1:0")
 	if !assert.NoError(t, err) {
@@ -26,9 +32,11 @@ func TestRoundTrip(t *testing.T) {
 		for {
 			conn, err := el.Accept()
 			if err != nil {
-				t.Fatalf("Unable to accept: %v", err)
+				return
 			}
 			go func() {
+				defer conn.Close()
+
 				b := make([]byte, 1)
 				for {
 					_, err := conn.Read(b)
@@ -37,7 +45,6 @@ func TestRoundTrip(t *testing.T) {
 					}
 					conn.Write(b)
 				}
-				conn.Close()
 			}()
 		}
 	}()
@@ -55,7 +62,6 @@ func TestRoundTrip(t *testing.T) {
 	}
 	defer l2.Close()
 
-	// second enhttp server
 	hs := &http.Server{
 		Handler: NewServerHandler(fmt.Sprintf("http://%v/", l2.Addr())),
 	}
@@ -63,7 +69,11 @@ func TestRoundTrip(t *testing.T) {
 	go hs.Serve(l2)
 
 	// enhttp dialer
-	dialer := NewDialer(&http.Client{}, fmt.Sprintf("http://%v/", l.Addr()))
+	dialer := NewDialer(&http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+		},
+	}, fmt.Sprintf("http://%v/", l.Addr()))
 
 	conn, err := dialer("tcp", el.Addr().String())
 	if !assert.NoError(t, err) {
@@ -85,5 +95,7 @@ func TestRoundTrip(t *testing.T) {
 		}
 		assert.Equal(t, text, string(b[:n]))
 	}
-	conn.Close()
+
+	err = conn.Close()
+	assert.NoError(t, err)
 }

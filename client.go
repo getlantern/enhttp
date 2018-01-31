@@ -25,6 +25,8 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 			serverURL:    serverURL,
 			readDeadline: time.Now().Add(10 * 365 * 24 * time.Hour).UnixNano(),
 			received:     make(chan *result, 10),
+			closed:       make(chan bool, 1),
+			closeErrCh:   make(chan error, 1),
 		}, nil
 	}
 }
@@ -55,6 +57,8 @@ type conn struct {
 	serverURL    string
 	readDeadline int64
 	received     chan *result
+	closed       chan bool
+	closeErrCh   chan error
 	unread       []byte
 	receiveOnce  sync.Once
 	closeOnce    sync.Once
@@ -65,6 +69,7 @@ func (c *conn) Write(b []byte) (n int, err error) {
 	c.mx.RLock()
 	serverURL := c.serverURL
 	c.mx.RUnlock()
+
 	req, err := http.NewRequest(http.MethodPost, serverURL, bytes.NewReader(b))
 	if err != nil {
 		return 0, log.Errorf("Error constructing request: %v", err)
@@ -92,12 +97,29 @@ func (c *conn) Write(b []byte) (n int, err error) {
 
 func (c *conn) receive(resp *http.Response) {
 	defer resp.Body.Close()
+	defer close(c.received)
+
+	received := make(chan *result)
+	go func() {
+		for {
+			b := make([]byte, 8192)
+			n, err := resp.Body.Read(b)
+			received <- &result{b[:n], err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	for {
-		b := make([]byte, 8192)
-		n, err := resp.Body.Read(b)
-		c.received <- &result{b[:n], err}
-		if err != nil {
+		select {
+		case <-c.closed:
 			return
+		case r := <-received:
+			c.received <- r
+			if r.err != nil {
+				return
+			}
 		}
 	}
 }
@@ -172,9 +194,32 @@ func (c *conn) RemoteAddr() net.Addr {
 
 func (c *conn) Close() error {
 	c.closeOnce.Do(func() {
-		// TODO: actually close this thing somehow
+		defer close(c.closeErrCh)
+
+		c.closed <- true
+		c.mx.RLock()
+		serverURL := c.serverURL
+		c.mx.RUnlock()
+
+		req, err := http.NewRequest(http.MethodPost, serverURL, nil)
+		if err != nil {
+			c.closeErrCh <- errors.New("Error constructing close request: %v", err)
+			return
+		}
+		req.Header.Set(ConnectionIDHeader, c.id)
+		req.Header.Set(Close, "true")
+		resp, err := c.client.Do(req)
+		if err != nil {
+			c.closeErrCh <- errors.New("Error posting close request: %v", err)
+			return
+		}
+		if resp.StatusCode != http.StatusOK {
+			c.closeErrCh <- errors.New("Unexpected response status posting data: %d", resp.StatusCode)
+			return
+		}
 	})
-	return nil
+
+	return <-c.closeErrCh
 }
 
 func timeFromInt(ts int64) time.Time {
