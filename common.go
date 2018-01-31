@@ -16,6 +16,8 @@
 package enhttp
 
 import (
+	"time"
+
 	"github.com/getlantern/golog"
 )
 
@@ -37,3 +39,13 @@ const (
 var (
 	log = golog.LoggerFor("enhttp")
 )
+
+func intFromTime(ts time.Time) int64 {
+	return ts.UnixNano()
+}
+
+func timeFromInt(ts int64) time.Time {
+	s := ts / int64(time.Second)
+	ns := ts % int64(time.Second)
+	return time.Unix(s, ns)
+}

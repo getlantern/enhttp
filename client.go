@@ -23,7 +23,7 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 			origin:       addr,
 			client:       client,
 			serverURL:    serverURL,
-			readDeadline: time.Now().Add(10 * 365 * 24 * time.Hour).UnixNano(),
+			readDeadline: intFromTime(time.Now().Add(10 * 365 * 24 * time.Hour)),
 			received:     make(chan *result, 10),
 			closed:       make(chan bool, 1),
 			closeErrCh:   make(chan error, 1),
@@ -106,6 +106,7 @@ func (c *conn) receive(resp *http.Response) {
 			n, err := resp.Body.Read(b)
 			received <- &result{b[:n], err}
 			if err != nil {
+				log.Debugf("Error on receive: %v", err)
 				return
 			}
 		}
@@ -220,10 +221,4 @@ func (c *conn) Close() error {
 	})
 
 	return <-c.closeErrCh
-}
-
-func timeFromInt(ts int64) time.Time {
-	s := ts / int64(time.Second)
-	ns := ts % int64(time.Second)
-	return time.Unix(s, ns)
 }

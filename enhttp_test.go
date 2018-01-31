@@ -3,9 +3,11 @@ package enhttp
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/getlantern/fdcount"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +65,7 @@ func TestRoundTrip(t *testing.T) {
 	defer l2.Close()
 
 	hs := &http.Server{
-		Handler: NewServerHandler(fmt.Sprintf("http://%v/", l2.Addr())),
+		Handler: NewServerHandler(2*time.Second, fmt.Sprintf("http://%v/", l2.Addr())),
 	}
 	go hs.Serve(l)
 	go hs.Serve(l2)
@@ -98,4 +100,17 @@ func TestRoundTrip(t *testing.T) {
 
 	err = conn.Close()
 	assert.NoError(t, err)
+
+	// Create a new connection that we don't close in order to test that reaping
+	// works.
+	conn, err = dialer("tcp", el.Addr().String())
+	if !assert.NoError(t, err) {
+		return
+	}
+	conn.Write([]byte(text))
+	go io.Copy(ioutil.Discard, conn)
+
+	log.Debugf("Echo server is: %v", el.Addr())
+	log.Debugf("enhttp 1 server is: %v", l.Addr())
+	log.Debugf("enhttp 2 server is: %v", l2.Addr())
 }
