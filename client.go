@@ -51,11 +51,11 @@ type result struct {
 }
 
 type conn struct {
+	readDeadline int64
 	id           string
 	origin       string
 	client       *http.Client
 	serverURL    string
-	readDeadline int64
 	received     chan *result
 	closed       chan bool
 	closeErrCh   chan error
