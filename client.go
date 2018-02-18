@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getlantern/errors"
+	"github.com/getlantern/netx"
 	"github.com/getlantern/uuid"
 )
 
@@ -29,6 +30,22 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 			closeErrCh:   make(chan error, 1),
 		}, nil
 	}
+}
+
+// IsENHTTP indicates whether the given candidate is an ENHTTP client connection
+// or a wrapper around one.
+func IsENHTTP(candidate net.Conn) bool {
+	isClientConn := false
+	netx.WalkWrapped(candidate, func(wrapped net.Conn) bool {
+		switch wrapped.(type) {
+		case *conn:
+			isClientConn = true
+			return false
+		default:
+			return true
+		}
+	})
+	return isClientConn
 }
 
 type errTimeout string

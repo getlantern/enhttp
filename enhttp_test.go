@@ -83,6 +83,8 @@ func TestRoundTrip(t *testing.T) {
 	}
 	defer conn.Close()
 
+	assert.True(t, IsENHTTP(conn))
+
 	for i := 0; i < 100; i++ {
 		n, err := conn.Write([]byte(text))
 		if !assert.NoError(t, err) {
