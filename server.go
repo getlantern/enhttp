@@ -42,8 +42,15 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	conn := s.conns[connID]
 	s.mx.RUnlock()
 	first := conn == nil
+	isClose := req.Header.Get(Close) != ""
 
 	if first {
+		if isClose {
+			log.Debug("Attempt to close already closed connection")
+			resp.WriteHeader(http.StatusOK)
+			return
+		}
+
 		// Connect to the origin
 		origin := req.Header.Get(OriginHeader)
 		_conn, err := net.Dial("tcp", origin)
@@ -94,7 +101,7 @@ func (s *server) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if req.Header.Get(Close) != "" {
+	if isClose {
 		// Close the connection
 		conn.Close()
 		s.mx.Lock()
