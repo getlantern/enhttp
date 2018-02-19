@@ -121,6 +121,12 @@ func (c *conn) receive(resp *http.Response) {
 		for {
 			b := make([]byte, 8192)
 			n, err := resp.Body.Read(b)
+			// For some reason, when domain-fronting, we often get ErrUnexpectedEOF
+			// even though the data transfer seems to work correctly, so for now, just
+			// treat it like EOF.
+			if err == io.ErrUnexpectedEOF {
+				err = io.EOF
+			}
 			received <- &result{b[:n], err}
 			if err != nil {
 				log.Debugf("Error on receive: %v", err)
@@ -160,7 +166,7 @@ func (c *conn) Read(b []byte) (int, error) {
 		c.unread = result.b
 		return c.Read(b)
 	case <-time.After(timeout):
-		return 0, errTimeout("read timeout")
+		return 0, errTimeout("i/o timeout")
 	}
 }
 
