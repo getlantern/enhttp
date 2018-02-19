@@ -19,6 +19,9 @@ import (
 // specified to configure the underlying HTTP behavior.
 func NewDialer(client *http.Client, serverURL string) func(string, string) (net.Conn, error) {
 	return func(network, addr string) (net.Conn, error) {
+		if addr == "" {
+			return nil, errors.New("No address when creating enhttp net.Conn")
+		}
 		return &conn{
 			id:           uuid.NewRandom().String(),
 			origin:       addr,
