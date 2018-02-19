@@ -238,7 +238,7 @@ func (c *conn) Close() error {
 			return
 		}
 		if resp.StatusCode != http.StatusOK {
-			c.closeErrCh <- errors.New("Unexpected response status posting data: %d", resp.StatusCode)
+			c.closeErrCh <- errors.New("Unexpected response status posting data on close: %d", resp.StatusCode)
 			return
 		}
 	})
