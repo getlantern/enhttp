@@ -16,6 +16,7 @@
 package enhttp
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/getlantern/golog"
@@ -39,6 +40,16 @@ const (
 var (
 	log = golog.LoggerFor("enhttp")
 )
+
+// OriginHost extracts the origin from the given request, using X-Origin header
+// if available otherwise using the Host header.
+func OriginHost(req *http.Request) string {
+	origin := req.Header.Get(OriginHeader)
+	if origin != "" {
+		return origin
+	}
+	return req.Host
+}
 
 func intFromTime(ts time.Time) int64 {
 	return ts.UnixNano()
