@@ -3,6 +3,7 @@ package enhttp
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"sync"
@@ -31,6 +32,7 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 			received:     make(chan *result, 10),
 			closed:       make(chan bool, 1),
 			closeErrCh:   make(chan error, 1),
+			first:        true,
 		}, nil
 	}
 }
@@ -80,7 +82,7 @@ type conn struct {
 	closed       chan bool
 	closeErrCh   chan error
 	unread       []byte
-	receiveOnce  sync.Once
+	first        bool
 	closeOnce    sync.Once
 	mx           sync.RWMutex
 }
@@ -88,6 +90,8 @@ type conn struct {
 func (c *conn) Write(b []byte) (n int, err error) {
 	c.mx.RLock()
 	serverURL := c.serverURL
+	wasFirst := c.first
+	c.first = false
 	c.mx.RUnlock()
 
 	req, err := http.NewRequest(http.MethodPost, serverURL, bytes.NewReader(b))
@@ -109,9 +113,12 @@ func (c *conn) Write(b []byte) (n int, err error) {
 		c.serverURL = updatedServerURL
 		c.mx.Unlock()
 	}
-	c.receiveOnce.Do(func() {
+	if wasFirst {
 		go c.receive(resp)
-	})
+	} else {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}
 	return len(b), nil
 }
 
@@ -132,7 +139,9 @@ func (c *conn) receive(resp *http.Response) {
 			}
 			received <- &result{b[:n], err}
 			if err != nil {
-				log.Debugf("Error on receive: %v", err)
+				if err != io.EOF {
+					log.Debugf("Error on receive: %v", err)
+				}
 				return
 			}
 		}
@@ -240,6 +249,8 @@ func (c *conn) Close() error {
 			c.closeErrCh <- errors.New("Error posting close request: %v", err)
 			return
 		}
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			c.closeErrCh <- errors.New("Unexpected response status posting data on close: %d", resp.StatusCode)
 			return
