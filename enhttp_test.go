@@ -20,6 +20,7 @@ const (
 func TestRoundTrip(t *testing.T) {
 	_, counter, err := fdcount.Matching("TCP")
 	defer func() {
+		time.Sleep(1 * time.Second)
 		assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed")
 	}()
 
