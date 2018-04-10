@@ -6,7 +6,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"testing"
 	"time"
 
@@ -23,8 +25,11 @@ func TestRoundTrip(t *testing.T) {
 	goroutines := runtime.NumGoroutine()
 	defer func() {
 		time.Sleep(1 * time.Second)
-		assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed")
-		assert.Equal(t, goroutines+1, runtime.NumGoroutine(), "No gooutines except the one spawned by NewServerHandler should be leaked")
+		if assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed") {
+			if !assert.Equal(t, goroutines+1, runtime.NumGoroutine(), "No goroutines except the one spawned by NewServerHandler should be leaked") {
+				pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+			}
+		}
 	}()
 
 	// echo server
