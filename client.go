@@ -30,7 +30,7 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 			serverURL:    serverURL,
 			readDeadline: intFromTime(time.Now().Add(10 * 365 * 24 * time.Hour)),
 			received:     make(chan *result, 10),
-			closed:       make(chan bool, 1),
+			closed:       make(chan struct{}),
 			closeErrCh:   make(chan error, 1),
 			first:        true,
 		}, nil
@@ -79,7 +79,7 @@ type conn struct {
 	client       *http.Client
 	serverURL    string
 	received     chan *result
-	closed       chan bool
+	closed       chan struct{}
 	closeErrCh   chan error
 	unread       []byte
 	first        bool
@@ -137,12 +137,16 @@ func (c *conn) receive(resp *http.Response) {
 			if err == io.ErrUnexpectedEOF {
 				err = io.EOF
 			}
-			received <- &result{b[:n], err}
-			if err != nil {
-				if err != io.EOF {
-					log.Debugf("Error on receive: %v", err)
-				}
+			select {
+			case <-c.closed:
 				return
+			case received <- &result{b[:n], err}:
+				if err != nil {
+					if err != io.EOF {
+						log.Debugf("Error on receive: %v", err)
+					}
+					return
+				}
 			}
 		}
 	}()
@@ -232,7 +236,7 @@ func (c *conn) Close() error {
 	c.closeOnce.Do(func() {
 		defer close(c.closeErrCh)
 
-		c.closed <- true
+		close(c.closed)
 		c.mx.RLock()
 		serverURL := c.serverURL
 		c.mx.RUnlock()

@@ -6,6 +6,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
+	"runtime/pprof"
 	"testing"
 	"time"
 
@@ -19,8 +22,14 @@ const (
 
 func TestRoundTrip(t *testing.T) {
 	_, counter, err := fdcount.Matching("TCP")
+	goroutines := runtime.NumGoroutine()
 	defer func() {
-		assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed")
+		time.Sleep(1 * time.Second)
+		if assert.NoError(t, counter.AssertDelta(0), "All TCP sockets should have been closed") {
+			if !assert.Equal(t, goroutines+1, runtime.NumGoroutine(), "No goroutines except the one spawned by NewServerHandler should be leaked") {
+				pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+			}
+		}
 	}()
 
 	// echo server
@@ -67,9 +76,9 @@ func TestRoundTrip(t *testing.T) {
 	hs := &http.Server{
 		Handler: NewServerHandler(2*time.Second, fmt.Sprintf("http://%v/", l2.Addr())),
 	}
+
 	go hs.Serve(l)
 	go hs.Serve(l2)
-
 	// enhttp dialer
 	dialer := NewDialer(&http.Client{
 		Transport: &http.Transport{
@@ -110,7 +119,7 @@ func TestRoundTrip(t *testing.T) {
 		return
 	}
 	conn.Write([]byte(text))
-	go io.Copy(ioutil.Discard, conn)
+	io.Copy(ioutil.Discard, conn)
 
 	log.Debugf("Echo server is: %v", el.Addr())
 	log.Debugf("enhttp 1 server is: %v", l.Addr())
