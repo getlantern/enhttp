@@ -119,7 +119,7 @@ func TestRoundTrip(t *testing.T) {
 		return
 	}
 	conn.Write([]byte(text))
-	go io.Copy(ioutil.Discard, conn)
+	io.Copy(ioutil.Discard, conn)
 
 	log.Debugf("Echo server is: %v", el.Addr())
 	log.Debugf("enhttp 1 server is: %v", l.Addr())
