@@ -23,8 +23,12 @@ func NewDialer(client *http.Client, serverURL string) func(string, string) (net.
 		if addr == "" {
 			return nil, errors.New("No address when creating enhttp net.Conn")
 		}
+		id, err := uuid.NewRandom()
+		if err != nil {
+			return nil, err
+		}
 		return &conn{
-			id:           uuid.NewRandom().String(),
+			id:           id.String(),
 			origin:       addr,
 			client:       client,
 			serverURL:    serverURL,
